@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>電脳タグ P1</title>
+    <title>電脳タグ P2</title>
     <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1">
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
     <!-- 公式 hello-world と同じ2本構成: 位置計算の本体(THREEx) → A-Frame用ラッパ -->
@@ -15,23 +15,72 @@
       arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
       renderer="antialias: true; alpha: true">
 
-      <!-- ブロック3: 自分（端末）の位置と向き＝カメラ。GPSとコンパスを担当 -->
+      <!-- ブロック3: 自分（端末）の位置と向き＝カメラ -->
       <a-camera gps-new-camera="gpsMinDistance: 5"></a-camera>
 
-      <!-- ブロック5: 実機GPSの実測地点(35.522581,139.692001)の周囲15mに4色の箱。どっち向いても1個は見える -->
-      <!-- 北=赤 -->
-      <a-entity geometry="primitive: box" material="color: #ff4136" scale="2 2 2" position="0 1.5 0"
-        gps-new-entity-place="latitude: 35.5227157; longitude: 139.692001"></a-entity>
-      <!-- 東=緑 -->
-      <a-entity geometry="primitive: box" material="color: #2ecc40" scale="2 2 2" position="0 1.5 0"
-        gps-new-entity-place="latitude: 35.522581; longitude: 139.6921665"></a-entity>
-      <!-- 南=青 -->
-      <a-entity geometry="primitive: box" material="color: #0074d9" scale="2 2 2" position="0 1.5 0"
-        gps-new-entity-place="latitude: 35.5224463; longitude: 139.692001"></a-entity>
-      <!-- 西=黄 -->
-      <a-entity geometry="primitive: box" material="color: #ffdc00" scale="2 2 2" position="0 1.5 0"
-        gps-new-entity-place="latitude: 35.522581; longitude: 139.6918355"></a-entity>
+      <!-- ブロック5は廃止: 手書きの箱はもう置かない。箱はDBから来てJSが動的に追加する -->
 
     </a-scene>
+
+    <!-- ブロック7: タグを貼るUI（画面下のバー） -->
+    <div id="status" style="position:fixed; left:0; right:0; bottom:56px; z-index:9999; color:#0f0; font:13px monospace; padding:4px 8px; background:rgba(0,0,0,0.45);"></div>
+    <div id="ui" style="position:fixed; left:0; right:0; bottom:0; z-index:9999; display:flex; gap:6px; padding:8px; background:rgba(0,0,0,0.5);">
+      <input id="body" placeholder="ここに貼るメモ" style="flex:1; font-size:16px; padding:8px; border-radius:6px; border:none;">
+      <button id="post" style="font-size:16px; padding:8px 12px; border-radius:6px; border:none; background:#2ecc40; color:#fff;">ここに貼る</button>
+    </div>
+
+    <!-- supabase-js を読み込む（グローバル変数 supabase が使えるようになる） -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      // ===== ブロック6: Supabaseに接続 =====
+      // anonキーは公開前提（ブラウザに出る・RLSで守る思想）。secretのservice_roleは絶対に置かない。
+      const SUPABASE_URL  = 'https://mscfapmjcysqsetlaulj.supabase.co';
+      const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zY2ZhcG1qY3lzcXNldGxhdWxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2NTIyNDMsImV4cCI6MjA5ODIyODI0M30.2KQukivU9UVrjTfBtL56ffmlJXch3iDdRJNARYAvOZ0';
+      const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+      const scene    = document.querySelector('a-scene');
+      const statusEl = document.getElementById('status');
+      function setStatus(m){ statusEl.textContent = m; }
+
+      // 自分の現在地を覚えておく（gps-new-camera が動くたびに上書き）
+      let currentPos = null;
+      document.querySelector('[gps-new-camera]').addEventListener('gps-camera-update-position', function(e){
+        currentPos = { lat: e.detail.position.latitude, lng: e.detail.position.longitude };
+      });
+
+      // タグ1件を「箱」としてAR空間に追加する（P1で手書きしてた a-entity をJSで作る版）
+      function addTagEntity(tag){
+        var el = document.createElement('a-entity');
+        el.setAttribute('geometry', 'primitive: box');
+        el.setAttribute('material', 'color: #ff851b');
+        el.setAttribute('scale', '2 2 2');
+        el.setAttribute('position', '0 1.5 0');
+        el.setAttribute('gps-new-entity-place', 'latitude: ' + tag.lat + '; longitude: ' + tag.lng);
+        scene.appendChild(el);
+      }
+
+      // ===== ブロック8a: 起動時にDBから全タグを読んで描く =====
+      async function loadTags(){
+        const { data, error } = await db.from('tags').select('*');
+        if (error){ setStatus('読込エラー: ' + error.message); return; }
+        data.forEach(addTagEntity);
+        setStatus('保存済みタグ ' + data.length + '件を表示中');
+      }
+      loadTags();
+
+      // ===== ブロック8b: 「ここに貼る」で今のGPS＋メモをDBに保存して箱を増やす =====
+      document.getElementById('post').addEventListener('click', async function(){
+        const body = document.getElementById('body').value.trim();
+        if (!body){ setStatus('メモを入力して'); return; }
+        if (!currentPos){ setStatus('位置取得中… 少し待ってから押して'); return; }
+        const { data, error } = await db.from('tags')
+          .insert({ lat: currentPos.lat, lng: currentPos.lng, body: body })
+          .select();
+        if (error){ setStatus('保存エラー: ' + error.message); return; }
+        addTagEntity(data[0]);                       // 保存できたらその場に箱を出す
+        document.getElementById('body').value = '';
+        setStatus('貼った！「' + body + '」 (DB保存済み)');
+      });
+    </script>
   </body>
 </html>

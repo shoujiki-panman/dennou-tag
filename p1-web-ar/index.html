@@ -8,8 +8,10 @@
   </head>
   <body>
     <!-- ブロック2: ここからAR空間。カメラ映像を背景にする -->
+    <!-- DEBUG: 読み込み画面を消して裏側を見えるようにする（原因特定後に戻す） -->
     <a-scene
       vr-mode-ui="enabled: false"
+      loading-screen="enabled: false"
       arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
       renderer="antialias: true; alpha: true">
 
@@ -25,5 +27,23 @@
         gps-new-entity-place="latitude: 35.5229587; longitude: 139.6484532"></a-entity>
 
     </a-scene>
+
+    <!-- DEBUG: 画面に状態ログを出す（原因特定後に消す） -->
+    <div id="dbg" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:rgba(0,0,0,0.65);color:#0f0;font:12px monospace;padding:6px;max-height:50%;overflow:auto;white-space:pre-wrap;"></div>
+    <script>
+      var dbg = document.getElementById('dbg');
+      function log(m){ dbg.textContent = (new Date().toLocaleTimeString()+'  '+m+'\n') + dbg.textContent; }
+      log('script start. aframe=' + (window.AFRAME ? 'OK' : 'MISSING'));
+      window.addEventListener('error', function(e){ log('JS ERROR: ' + e.message); });
+      window.addEventListener('unhandledrejection', function(e){ log('REJECT: ' + ((e.reason&&e.reason.message)||e.reason)); });
+      document.addEventListener('arjs-video-loaded', function(){ log('camera video loaded ✅'); });
+      document.addEventListener('camera-error', function(){ log('CAMERA ERROR ❌'); });
+      var scene = document.querySelector('a-scene');
+      scene.addEventListener('loaded', function(){ log('scene loaded'); });
+      var cam = document.querySelector('[gps-new-camera]');
+      cam.addEventListener('gps-camera-update-position', function(e){
+        log('GPS: ' + e.detail.position.latitude.toFixed(6) + ', ' + e.detail.position.longitude.toFixed(6));
+      });
+    </script>
   </body>
 </html>

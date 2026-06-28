@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>電脳タグ P1</title>
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1">
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <!-- 公式 hello-world と同じ2本構成: 位置計算の本体(THREEx) → A-Frame用ラッパ -->
+    <script src="https://cdn.jsdelivr.net/npm/@ar-js-org/ar.js@3.4.7/three.js/build/ar-threex-location-only.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ar-js-org/ar.js@3.4.7/aframe/build/aframe-ar.js"></script>
+  </head>
+  <body>
+    <!-- ブロック2: ここからAR空間。カメラ映像を背景にする -->
+    <a-scene
+      vr-mode-ui="enabled: false"
+      arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
+      renderer="antialias: true; alpha: true">
+
+      <!-- ブロック3: 自分（端末）の位置と向き＝カメラ。GPSとコンパスを担当 -->
+      <a-camera gps-new-camera="gpsMinDistance: 5"></a-camera>
+
+      <!-- ブロック5: 実機GPSの実測地点(35.522581,139.692001)の周囲15mに4色の箱。どっち向いても1個は見える -->
+      <!-- 北=赤 -->
+      <a-entity geometry="primitive: box" material="color: #ff4136" scale="2 2 2" position="0 1.5 0"
+        gps-new-entity-place="latitude: 35.5227157; longitude: 139.692001"></a-entity>
+      <!-- 東=緑 -->
+      <a-entity geometry="primitive: box" material="color: #2ecc40" scale="2 2 2" position="0 1.5 0"
+        gps-new-entity-place="latitude: 35.522581; longitude: 139.6921665"></a-entity>
+      <!-- 南=青 -->
+      <a-entity geometry="primitive: box" material="color: #0074d9" scale="2 2 2" position="0 1.5 0"
+        gps-new-entity-place="latitude: 35.5224463; longitude: 139.692001"></a-entity>
+      <!-- 西=黄 -->
+      <a-entity geometry="primitive: box" material="color: #ffdc00" scale="2 2 2" position="0 1.5 0"
+        gps-new-entity-place="latitude: 35.522581; longitude: 139.6918355"></a-entity>
+
+    </a-scene>
+  </body>
+</html>

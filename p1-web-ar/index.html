@@ -46,6 +46,7 @@
       let currentPos = null;
       document.querySelector('[gps-new-camera]').addEventListener('gps-camera-update-position', function(e){
         currentPos = { lat: e.detail.position.latitude, lng: e.detail.position.longitude };
+        setStatus('現在地OK（' + currentPos.lat.toFixed(5) + ',' + currentPos.lng.toFixed(5) + '）メモを打って貼れます');
       });
 
       // タグ1件を「箱」としてAR空間に追加する（P1で手書きしてた a-entity をJSで作る版）
@@ -64,7 +65,7 @@
         const { data, error } = await db.from('tags').select('*');
         if (error){ setStatus('読込エラー: ' + error.message); return; }
         data.forEach(addTagEntity);
-        setStatus('保存済みタグ ' + data.length + '件を表示中');
+        setStatus('保存済みタグ ' + data.length + '件。画面を1回タップ→「現在地OK」が出たら貼れます');
       }
       loadTags();
 

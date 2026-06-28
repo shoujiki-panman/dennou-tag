@@ -20,13 +20,19 @@
       <!-- ブロック3: 自分（端末）の位置と向き＝カメラ。GPSとコンパスを担当 -->
       <a-camera gps-new-camera="gpsMinDistance: 5"></a-camera>
 
-      <!-- ブロック5: タグ本体。実機GPSの実測地点(35.522581,139.692001)の約20m北に1個浮かせる -->
-      <a-entity
-        geometry="primitive: box"
-        material="color: #ff4136"
-        scale="2 2 2"
-        position="0 1.5 0"
-        gps-new-entity-place="latitude: 35.522761; longitude: 139.692001"></a-entity>
+      <!-- ブロック5: 実機GPSの実測地点(35.522581,139.692001)の周囲15mに4色の箱。どっち向いても1個は見える -->
+      <!-- 北=赤 -->
+      <a-entity geometry="primitive: box" material="color: #ff4136" scale="2 2 2" position="0 1.5 0"
+        gps-new-entity-place="latitude: 35.5227157; longitude: 139.692001"></a-entity>
+      <!-- 東=緑 -->
+      <a-entity geometry="primitive: box" material="color: #2ecc40" scale="2 2 2" position="0 1.5 0"
+        gps-new-entity-place="latitude: 35.522581; longitude: 139.6921665"></a-entity>
+      <!-- 南=青 -->
+      <a-entity geometry="primitive: box" material="color: #0074d9" scale="2 2 2" position="0 1.5 0"
+        gps-new-entity-place="latitude: 35.5224463; longitude: 139.692001"></a-entity>
+      <!-- 西=黄 -->
+      <a-entity geometry="primitive: box" material="color: #ffdc00" scale="2 2 2" position="0 1.5 0"
+        gps-new-entity-place="latitude: 35.522581; longitude: 139.6918355"></a-entity>
 
     </a-scene>
 
@@ -42,23 +48,9 @@
       document.addEventListener('camera-error', function(){ log('CAMERA ERROR ❌'); });
       var scene = document.querySelector('a-scene');
       scene.addEventListener('loaded', function(){ log('scene loaded'); });
-      // DEBUG: タグの座標（ブロック5と同じ値）。現在地からの距離と方角を出して箱を探しやすくする
-      var TAG = { lat: 35.522761, lng: 139.692001 };
-      function distBearing(lat, lng){
-        var R = 6371000, toR = Math.PI/180;
-        var dLat = (TAG.lat-lat)*toR, dLng = (TAG.lng-lng)*toR;
-        var a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat*toR)*Math.cos(TAG.lat*toR)*Math.sin(dLng/2)*Math.sin(dLng/2);
-        var d = R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        var y = Math.sin(dLng)*Math.cos(TAG.lat*toR);
-        var x = Math.cos(lat*toR)*Math.sin(TAG.lat*toR) - Math.sin(lat*toR)*Math.cos(TAG.lat*toR)*Math.cos(dLng);
-        var brg = (Math.atan2(y, x)/toR + 360) % 360;
-        return { d: d, brg: brg };
-      }
       var cam = document.querySelector('[gps-new-camera]');
       cam.addEventListener('gps-camera-update-position', function(e){
-        var p = e.detail.position;
-        var r = distBearing(p.latitude, p.longitude);
-        log('GPS ' + p.latitude.toFixed(6) + ',' + p.longitude.toFixed(6) + ' → 箱まで ' + r.d.toFixed(0) + 'm 方角' + r.brg.toFixed(0) + '°');
+        log('GPS ' + e.detail.position.latitude.toFixed(6) + ',' + e.detail.position.longitude.toFixed(6) + ' 取得OK。ぐるっと一周して4色の箱を探して');
       });
     </script>
   </body>

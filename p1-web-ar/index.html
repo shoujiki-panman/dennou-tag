@@ -16,7 +16,13 @@
       <!-- ブロック3: 自分（端末）の位置と向き＝カメラ。GPSとコンパスを担当 -->
       <a-camera gps-new-camera="gpsMinDistance: 5"></a-camera>
 
-      <!-- ブロック5: タグ本体はこの下に足す（次のステップ） -->
+      <!-- ブロック5: タグ本体。基準地点(35.5227787,139.6484532)の約20m北に1個浮かせる -->
+      <a-entity
+        geometry="primitive: box"
+        material="color: #ff4136"
+        scale="2 2 2"
+        position="0 1.5 0"
+        gps-new-entity-place="latitude: 35.5229587; longitude: 139.6484532"></a-entity>
 
     </a-scene>
   </body>

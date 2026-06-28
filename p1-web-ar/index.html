@@ -7,6 +7,17 @@
     <script src="https://cdn.jsdelivr.net/npm/@ar-js-org/ar.js@3.4.7/aframe/build/aframe-ar-new-location-only.js"></script>
   </head>
   <body>
-    <!-- まだ空。ブロック2でここにAR空間を足す -->
+    <!-- ブロック2: ここからAR空間。カメラ映像を背景にする -->
+    <a-scene
+      vr-mode-ui="enabled: false"
+      arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
+      renderer="antialias: true; alpha: true">
+
+      <!-- ブロック3: 自分（端末）の位置と向き＝カメラ。GPSとコンパスを担当 -->
+      <a-camera gps-new-camera="gpsMinDistance: 5"></a-camera>
+
+      <!-- ブロック5: タグ本体はこの下に足す（次のステップ） -->
+
+    </a-scene>
   </body>
 </html>

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>電脳タグ P2</title>
+    <title>電脳タグ P3</title>
     <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1">
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
     <!-- 公式 hello-world と同じ2本構成: 位置計算の本体(THREEx) → A-Frame用ラッパ -->
@@ -14,13 +14,12 @@
       vr-mode-ui="enabled: false"
       arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
       renderer="antialias: true; alpha: true">
-
-      <!-- ブロック3: 自分（端末）の位置と向き＝カメラ -->
       <a-camera gps-new-camera="gpsMinDistance: 5"></a-camera>
-
       <!-- 箱はDBから来てJSが動的に追加する -->
-
     </a-scene>
+
+    <!-- ブロック9: タグ一覧（自分/他人の色分け＋🗑で削除を試す） -->
+    <div id="list" style="position:fixed; top:0; left:0; right:0; z-index:9999; max-height:38%; overflow:auto; background:rgba(0,0,0,0.55); color:#fff; font:13px sans-serif; padding:6px;"></div>
 
     <!-- ブロック7: タグを貼るUI（画面下のバー） -->
     <div id="status" style="position:fixed; left:0; right:0; bottom:56px; z-index:9999; color:#0f0; font:13px monospace; padding:4px 8px; background:rgba(0,0,0,0.45);"></div>
@@ -29,87 +28,118 @@
       <button id="post" style="font-size:16px; padding:8px 12px; border-radius:6px; border:none; background:#2ecc40; color:#fff;">ここに貼る</button>
     </div>
 
-    <!-- supabase-js を読み込む（グローバル変数 supabase が使えるようになる） -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
       // ===== ブロック6: Supabaseに接続 =====
-      // anonキーは公開前提（ブラウザに出る・RLSで守る思想）。secretのservice_roleは絶対に置かない。
       const SUPABASE_URL  = 'https://mscfapmjcysqsetlaulj.supabase.co';
       const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zY2ZhcG1qY3lzcXNldGxhdWxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2NTIyNDMsImV4cCI6MjA5ODIyODI0M30.2KQukivU9UVrjTfBtL56ffmlJXch3iDdRJNARYAvOZ0';
       const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
       const scene    = document.querySelector('a-scene');
       const statusEl = document.getElementById('status');
+      const listEl   = document.getElementById('list');
       function setStatus(m){ statusEl.textContent = m; }
 
-      var tags = [];          // 表示中のタグ一覧（距離計算用）
-      var currentPos = null;  // 自分の現在地
+      var myUid = null;       // 自分の匿名ユーザーID
+      var tags = [];          // 表示中のタグ（各要素に _el = AR箱への参照を持たせる）
+      var currentPos = null;
 
-      // 2地点の距離(m)と方角(度, 0=北)を返す
-      function distBearing(aLat, aLng, bLat, bLng){
-        var R = 6371000, toR = Math.PI/180;
-        var dLat = (bLat-aLat)*toR, dLng = (bLng-aLng)*toR;
-        var s = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(aLat*toR)*Math.cos(bLat*toR)*Math.sin(dLng/2)*Math.sin(dLng/2);
-        var d = R*2*Math.atan2(Math.sqrt(s), Math.sqrt(1-s));
-        var y = Math.sin(dLng)*Math.cos(bLat*toR);
-        var x = Math.cos(aLat*toR)*Math.sin(bLat*toR) - Math.sin(aLat*toR)*Math.cos(bLat*toR)*Math.cos(dLng);
-        var brg = (Math.atan2(y, x)/toR + 360) % 360;
-        return { d: d, brg: brg };
-      }
-      // 自分から3m以上離れた一番近い箱の案内文（真上の0m箱は除外）
-      function nearestInfo(){
-        if (!currentPos || !tags.length) return '';
-        var best = null;
-        tags.forEach(function(t){
-          var r = distBearing(currentPos.lat, currentPos.lng, t.lat, t.lng);
-          if (r.d >= 3 && (!best || r.d < best.d)) best = r;
-        });
-        return best ? (' / 最寄りの箱 ' + best.d.toFixed(0) + 'm 方角' + best.brg.toFixed(0) + '°') : '';
+      // ===== ブロック10: 匿名サインイン（既存セッションがあれば再利用） =====
+      async function ensureSignedIn(){
+        var s = (await db.auth.getSession()).data.session;
+        if (!s){
+          var r = await db.auth.signInAnonymously();
+          if (r.error) throw r.error;
+          s = r.data.session;
+        }
+        return s.user.id;
       }
 
+      // 現在地を覚える
       document.querySelector('[gps-new-camera]').addEventListener('gps-camera-update-position', function(e){
         currentPos = { lat: e.detail.position.latitude, lng: e.detail.position.longitude };
-        setStatus('現在地OK（' + currentPos.lat.toFixed(5) + ',' + currentPos.lng.toFixed(5) + '）'
-          + (tags.length ? nearestInfo() : ' メモを打って貼れます'));
+        if (statusEl.textContent.indexOf('現在地OK') === -1)
+          setStatus('現在地OK（' + currentPos.lat.toFixed(5) + ',' + currentPos.lng.toFixed(5) + '）メモを打って貼れます');
       });
 
-      // タグ1件を「箱」としてAR空間に追加する
+      // タグ1件をAR空間に箱として追加（自分=オレンジ / 他人=青）
       function addTagEntity(tag){
-        tags.push(tag);
+        var mine = (tag.user_id === myUid);
         var el = document.createElement('a-entity');
         el.setAttribute('geometry', 'primitive: box');
-        el.setAttribute('material', 'color: #ff851b');
+        el.setAttribute('material', 'color: ' + (mine ? '#ff851b' : '#0074d9'));
         el.setAttribute('scale', '3 3 3');
         el.setAttribute('position', '0 1.5 0');
         el.setAttribute('gps-new-entity-place', 'latitude: ' + tag.lat + '; longitude: ' + tag.lng);
         scene.appendChild(el);
+        tag._el = el;
       }
 
-      // ===== ブロック8a: 起動時にDBから全タグを読んで描く（シーン準備後に） =====
+      // 一覧UIを描き直す
+      function renderList(){
+        listEl.innerHTML = '<b>タグ一覧（' + tags.length + '）</b> あなた=' + (myUid ? myUid.slice(0,8) : '?') + '…';
+        tags.forEach(function(t){
+          var mine = (t.user_id === myUid);
+          var row = document.createElement('div');
+          row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:4px 0; border-top:1px solid rgba(255,255,255,0.15);';
+          row.innerHTML = '<span>' + (mine ? '🟠自分' : '🔵他人') + '</span><span style="flex:1;">' + t.body + '</span>';
+          var btn = document.createElement('button');
+          btn.textContent = '🗑';
+          btn.style.cssText = 'font-size:15px; border:none; border-radius:5px; padding:4px 8px;';
+          btn.addEventListener('click', function(){ deleteTag(t); });
+          row.appendChild(btn);
+          listEl.appendChild(row);
+        });
+      }
+
+      // ===== ブロック11: 削除（RLSで自分の行だけ消える） =====
+      async function deleteTag(tag){
+        var r = await db.from('tags').delete().eq('id', tag.id).select();
+        if (r.error){ setStatus('削除エラー: ' + r.error.message); return; }
+        if (!r.data || r.data.length === 0){
+          setStatus('消せません（他人のタグ。RLSが拒否）'); return;   // ← P3の肝: DBが他人のを弾く
+        }
+        if (tag._el) tag._el.parentNode.removeChild(tag._el);          // AR箱を消す
+        tags = tags.filter(function(t){ return t.id !== tag.id; });    // 一覧から消す
+        renderList();
+        setStatus('自分のタグを消した（DBからも削除）');
+      }
+
+      // ===== ブロック8a: 起動時にDBから全タグを読んで描く =====
       async function loadTags(){
-        const { data, error } = await db.from('tags').select('*');
-        if (error){ setStatus('読込エラー: ' + error.message); return; }
-        data.forEach(addTagEntity);
-        setStatus('保存済みタグ ' + data.length + '件。画面を1回タップ→「現在地OK」を待って');
+        var r = await db.from('tags').select('*');
+        if (r.error){ setStatus('読込エラー: ' + r.error.message); return; }
+        tags = [];
+        r.data.forEach(addTagEntity);
+        tags = r.data;
+        renderList();
       }
-      if (scene.hasLoaded) loadTags(); else scene.addEventListener('loaded', loadTags);
 
-      // ===== ブロック8b: 「ここに貼る」で保存して箱を増やす =====
+      // ===== ブロック8b: 「ここに貼る」で保存（user_idは自分のIDで） =====
       document.getElementById('post').addEventListener('click', async function(){
-        const body = document.getElementById('body').value.trim();
+        var body = document.getElementById('body').value.trim();
         if (!body){ setStatus('メモを入力して'); return; }
         if (!currentPos){ setStatus('位置取得中… 「現在地OK」が出てから押して'); return; }
-        // 自分の真上だと見えないので、約12m北にずらして貼る（その場で一周すれば視界に入る）
-        var lat = currentPos.lat + 0.00011;
+        var lat = currentPos.lat + 0.00011;   // 真上だと見えないので約12m北
         var lng = currentPos.lng;
-        const { data, error } = await db.from('tags')
-          .insert({ lat: lat, lng: lng, body: body })
-          .select();
-        if (error){ setStatus('保存エラー: ' + error.message); return; }
-        addTagEntity(data[0]);
+        var r = await db.from('tags').insert({ lat: lat, lng: lng, body: body, user_id: myUid }).select();
+        if (r.error){ setStatus('保存エラー: ' + r.error.message); return; }
+        addTagEntity(r.data[0]);
+        tags.push(r.data[0]);
+        renderList();
         document.getElementById('body').value = '';
-        setStatus('貼った！北に約12m先（DB保存済み）。その場で一周して探して' + nearestInfo());
+        setStatus('貼った！北に約12m先（あなたのタグ）');
       });
+
+      // ===== 初期化: サインイン → シーン準備 → タグ読込 =====
+      (async function init(){
+        try {
+          myUid = await ensureSignedIn();
+          setStatus('サインイン済み（あなた: ' + myUid.slice(0,8) + '…）画面を1回タップ→現在地OKを待って');
+        } catch (e){ setStatus('サインイン失敗: ' + e.message); return; }
+        if (!scene.hasLoaded) await new Promise(function(res){ scene.addEventListener('loaded', res); });
+        await loadTags();
+      })();
     </script>
   </body>
 </html>

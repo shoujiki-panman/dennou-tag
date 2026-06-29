@@ -18,7 +18,7 @@
       <!-- ブロック3: 自分（端末）の位置と向き＝カメラ -->
       <a-camera gps-new-camera="gpsMinDistance: 5"></a-camera>
 
-      <!-- ブロック5は廃止: 手書きの箱はもう置かない。箱はDBから来てJSが動的に追加する -->
+      <!-- 箱はDBから来てJSが動的に追加する -->
 
     </a-scene>
 
@@ -42,45 +42,73 @@
       const statusEl = document.getElementById('status');
       function setStatus(m){ statusEl.textContent = m; }
 
-      // 自分の現在地を覚えておく（gps-new-camera が動くたびに上書き）
-      let currentPos = null;
+      var tags = [];          // 表示中のタグ一覧（距離計算用）
+      var currentPos = null;  // 自分の現在地
+
+      // 2地点の距離(m)と方角(度, 0=北)を返す
+      function distBearing(aLat, aLng, bLat, bLng){
+        var R = 6371000, toR = Math.PI/180;
+        var dLat = (bLat-aLat)*toR, dLng = (bLng-aLng)*toR;
+        var s = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(aLat*toR)*Math.cos(bLat*toR)*Math.sin(dLng/2)*Math.sin(dLng/2);
+        var d = R*2*Math.atan2(Math.sqrt(s), Math.sqrt(1-s));
+        var y = Math.sin(dLng)*Math.cos(bLat*toR);
+        var x = Math.cos(aLat*toR)*Math.sin(bLat*toR) - Math.sin(aLat*toR)*Math.cos(bLat*toR)*Math.cos(dLng);
+        var brg = (Math.atan2(y, x)/toR + 360) % 360;
+        return { d: d, brg: brg };
+      }
+      // 自分から3m以上離れた一番近い箱の案内文（真上の0m箱は除外）
+      function nearestInfo(){
+        if (!currentPos || !tags.length) return '';
+        var best = null;
+        tags.forEach(function(t){
+          var r = distBearing(currentPos.lat, currentPos.lng, t.lat, t.lng);
+          if (r.d >= 3 && (!best || r.d < best.d)) best = r;
+        });
+        return best ? (' / 最寄りの箱 ' + best.d.toFixed(0) + 'm 方角' + best.brg.toFixed(0) + '°') : '';
+      }
+
       document.querySelector('[gps-new-camera]').addEventListener('gps-camera-update-position', function(e){
         currentPos = { lat: e.detail.position.latitude, lng: e.detail.position.longitude };
-        setStatus('現在地OK（' + currentPos.lat.toFixed(5) + ',' + currentPos.lng.toFixed(5) + '）メモを打って貼れます');
+        setStatus('現在地OK（' + currentPos.lat.toFixed(5) + ',' + currentPos.lng.toFixed(5) + '）'
+          + (tags.length ? nearestInfo() : ' メモを打って貼れます'));
       });
 
-      // タグ1件を「箱」としてAR空間に追加する（P1で手書きしてた a-entity をJSで作る版）
+      // タグ1件を「箱」としてAR空間に追加する
       function addTagEntity(tag){
+        tags.push(tag);
         var el = document.createElement('a-entity');
         el.setAttribute('geometry', 'primitive: box');
         el.setAttribute('material', 'color: #ff851b');
-        el.setAttribute('scale', '2 2 2');
+        el.setAttribute('scale', '3 3 3');
         el.setAttribute('position', '0 1.5 0');
         el.setAttribute('gps-new-entity-place', 'latitude: ' + tag.lat + '; longitude: ' + tag.lng);
         scene.appendChild(el);
       }
 
-      // ===== ブロック8a: 起動時にDBから全タグを読んで描く =====
+      // ===== ブロック8a: 起動時にDBから全タグを読んで描く（シーン準備後に） =====
       async function loadTags(){
         const { data, error } = await db.from('tags').select('*');
         if (error){ setStatus('読込エラー: ' + error.message); return; }
         data.forEach(addTagEntity);
-        setStatus('保存済みタグ ' + data.length + '件。画面を1回タップ→「現在地OK」が出たら貼れます');
+        setStatus('保存済みタグ ' + data.length + '件。画面を1回タップ→「現在地OK」を待って');
       }
-      loadTags();
+      if (scene.hasLoaded) loadTags(); else scene.addEventListener('loaded', loadTags);
 
-      // ===== ブロック8b: 「ここに貼る」で今のGPS＋メモをDBに保存して箱を増やす =====
+      // ===== ブロック8b: 「ここに貼る」で保存して箱を増やす =====
       document.getElementById('post').addEventListener('click', async function(){
         const body = document.getElementById('body').value.trim();
         if (!body){ setStatus('メモを入力して'); return; }
-        if (!currentPos){ setStatus('位置取得中… 少し待ってから押して'); return; }
+        if (!currentPos){ setStatus('位置取得中… 「現在地OK」が出てから押して'); return; }
+        // 自分の真上だと見えないので、約12m北にずらして貼る（その場で一周すれば視界に入る）
+        var lat = currentPos.lat + 0.00011;
+        var lng = currentPos.lng;
         const { data, error } = await db.from('tags')
-          .insert({ lat: currentPos.lat, lng: currentPos.lng, body: body })
+          .insert({ lat: lat, lng: lng, body: body })
           .select();
         if (error){ setStatus('保存エラー: ' + error.message); return; }
-        addTagEntity(data[0]);                       // 保存できたらその場に箱を出す
+        addTagEntity(data[0]);
         document.getElementById('body').value = '';
-        setStatus('貼った！「' + body + '」 (DB保存済み)');
+        setStatus('貼った！北に約12m先（DB保存済み）。その場で一周して探して' + nearestInfo());
       });
     </script>
   </body>
